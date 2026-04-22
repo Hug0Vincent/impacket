@@ -291,12 +291,18 @@ class HTTPRelayServer(Thread):
                 self.challengeMessage = self.client.sendNegotiate(token)
 
                 # Remove target NetBIOS field from the NTLMSSP_CHALLENGE
-                if self.server.config.remove_target:
-                    av_pairs = ntlm.AV_PAIRS(self.challengeMessage['TargetInfoFields'])
-                    del av_pairs[ntlm.NTLMSSP_AV_HOSTNAME]
-                    self.challengeMessage['TargetInfoFields'] = av_pairs.getData()
-                    self.challengeMessage['TargetInfoFields_len'] = len(av_pairs.getData())
-                    self.challengeMessage['TargetInfoFields_max_len'] = len(av_pairs.getData())
+                #if self.server.config.remove_target:
+                #av_pairs = ntlm.AV_PAIRS2(self.challengeMessage['TargetInfoFields'])
+                #av_pairs.add_field(ntlm.NTLMSSP_AV_HOSTNAME, "".encode('UTF-16LE'))
+                
+                av_pairs = ntlm.AV_PAIRS(self.challengeMessage['TargetInfoFields'])
+                del av_pairs[ntlm.NTLMSSP_AV_HOSTNAME]
+                av_pairs[ntlm.NTLMSSP_AV_HOSTNAME] = "WIN-KIMMCJSU609".encode('UTF-16LE')
+                
+                av_pairs.dump()
+                self.challengeMessage['TargetInfoFields'] = av_pairs.getData()
+                self.challengeMessage['TargetInfoFields_len'] = len(av_pairs.getData())
+                self.challengeMessage['TargetInfoFields_max_len'] = len(av_pairs.getData())
 
                 # Check for errors
                 if self.challengeMessage is False:

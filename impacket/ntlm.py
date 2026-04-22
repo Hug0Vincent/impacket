@@ -266,6 +266,67 @@ class AV_PAIRS:
 
         return ans
 
+class AV_PAIRS2:
+    def __init__(self, data = None):
+        # Changed from {} to [] to support duplicate keys
+        self.fields = [] 
+        if data is not None:
+            self.fromString(data)
+
+    def __setitem__(self, key, value):
+        # This replaces existing keys if you want standard dict-like behavior,
+        # or you can just call self.add_field(key, value)
+        self.fields.append((key, (len(value), value)))
+
+    def add_field(self, key, value):
+        """Explicitly add a field, allowing duplicates."""
+        self.fields.append((key, (len(value), value)))
+
+    def __getitem__(self, key):
+        # Returns a list of all matches since multiple keys can exist
+        results = [v for k, v in self.fields if k == key]
+        return results if results else None
+
+    def __delitem__(self, key):
+        # Removes ALL instances of that key
+        self.fields = [item for item in self.fields if item[0] != key]
+
+    def __len__(self):
+        return len(self.getData())
+
+    def fromString(self, data):
+        tInfo = data
+        fType = 0xff
+        while fType != NTLMSSP_AV_EOL and len(tInfo) >= 4:
+            fType = struct.unpack('<H', tInfo[:2])[0]
+            tInfo = tInfo[2:]
+            length = struct.unpack('<H', tInfo[:2])[0]
+            tInfo = tInfo[2:]
+            content = tInfo[:length]
+            
+            # Append as a tuple to the list instead of assigning to dict
+            if fType != NTLMSSP_AV_EOL:
+                self.fields.append((fType, (length, content)))
+            
+            tInfo = tInfo[length:]
+
+    def dump(self):
+        for fType, value_tuple in self.fields:
+            print("%s: {%r}" % (fType, value_tuple))
+
+    def getData(self):
+        # Filter out any EOL that might have been added manually
+        clean_fields = [f for f in self.fields if f[0] != NTLMSSP_AV_EOL]
+        
+        ans = b''
+        for fType, (length, content) in clean_fields:
+            ans += struct.pack('<HH', fType, length)
+            ans += content
+ 
+        # Always end with a NTLMSSP_AV_EOL
+        ans += struct.pack('<HH', NTLMSSP_AV_EOL, 0)
+        return ans
+
 # [MS-NLMP] 2.2.2.10 VERSION
 # https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-nlmp/b1a6ceb2-f8ad-462b-b5af-f18527c48175
 class VERSION(Structure):

